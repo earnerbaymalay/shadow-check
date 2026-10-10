@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadow Check</title>
+<style nonce="__NONCE__">
+:root{--bg:#f6f7f9;--panel:#fff;--ink:#14181f;--mute:#5d6675;--line:#e3e6eb;--accent:#2f5bea;
+--high:#c62828;--highbg:#fdecec;--med:#b26a00;--medbg:#fff3df;--ok:#1b7f45;--okbg:#e6f5ec;--bar:#2f5bea}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1319;--panel:#171c24;--ink:#e8ebf0;--mute:#97a1b2;--line:#27303c;--accent:#7b9bff;
+--high:#ff7b7b;--highbg:#3a1c1f;--med:#f2b254;--medbg:#3a2d17;--ok:#5fcf8c;--okbg:#17301f;--bar:#7b9bff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:24px 0 8px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute);display:inline-block}
+.dot.on{background:var(--ok)}
+input,select,button{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
+button{cursor:pointer}button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{color:var(--high)}
+button:focus-visible,input:focus-visible,select:focus-visible,tr:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-top:12px}
+.tile .n{font-size:24px;font-weight:650}.tile .l{color:var(--mute);font-size:12px}
+.alert{border-left:4px solid var(--med);margin-bottom:8px}
+.alert.HIGH{border-left-color:var(--high)}
+.badge{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:650}
+.badge.HIGH{background:var(--highbg);color:var(--high)}.badge.MEDIUM{background:var(--medbg);color:var(--med)}
+.badge.ok{background:var(--okbg);color:var(--ok)}.badge.k{background:var(--line);color:var(--mute)}
+.alert .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.alert ul{margin:6px 0 0;padding-left:18px;color:var(--mute)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.muted{color:var(--mute)}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--mute);font-weight:600}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}
+tr.allowed td{opacity:.55}
+svg{width:100%;height:auto;display:block}
+.empty{padding:18px;text-align:center;color:var(--mute)}
+.mt16{margin-top:16px}.mb8{margin-bottom:8px}.mb6{margin-bottom:6px}.grow{flex:1}
+#msg{color:var(--mute);font-size:12px;min-height:18px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><h1>Shadow Check</h1><div class="muted">Recurring-device and tracker detection</div></div>
+  <div class="bar panel">
+    <span class="dot" id="dot"></span><span id="sstat">Scanner: checking…</span>
+    <label class="muted" for="place">Place</label>
+    <input id="place" maxlength="40" placeholder="e.g. Home" size="12">
+    <button class="primary" id="go">Start</button>
+    <button class="danger" id="stop">Stop</button>
+    <button id="pair">Connect phone</button>
+  </div>
+</header>
+<div id="msg" role="status"></div>
+<div class="panel" id="pairbox" hidden></div>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="bar mt16">
+  <label class="muted" for="range">Range</label>
+  <select id="range"><option value="86400">24 hours</option><option value="604800" selected>7 days</option><option value="1209600">14 days</option></select>
+</div>
+
+<h2>Alerts</h2>
+<div id="alerts"></div>
+
+<h2>All devices</h2>
+<div class="bar mb8">
+  <input id="filter" placeholder="Filter by name, fingerprint, place…" size="32" aria-label="Filter devices">
+  <label><input type="checkbox" id="showAllowed"> show allowlisted</label>
+</div>
+<div class="panel scroll"><table>
+  <thead><tr><th>Status</th><th>Type</th><th>Fingerprint</th><th>Name / label</th><th>Places</th><th>Sightings</th><th>Last seen</th><th>Avg RSSI</th><th></th></tr></thead>
+  <tbody id="devs"></tbody>
+</table></div>
+
+<h2 id="tlh" hidden>Timeline</h2>
+<div class="panel" id="tl" hidden></div>
+</div>
+
+<script nonce="__NONCE__">
+const TOKEN = "__TOKEN__";
+const $ = id => document.getElementById(id);
+let state = null, selected = null;
+
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of kids) e.append(c instanceof Node ? c : document.createTextNode(c ?? ""));
+  return e;
+}
+const fmt = t => new Date(t * 1000).toLocaleString([], {month:"short", day:"numeric", hour:"2-digit", minute:"2-digit"});
+function ago(t) {
+  const s = Math.max(0, state.now - t);
+  return s < 90 ? Math.round(s) + "s ago" : s < 5400 ? Math.round(s / 60) + "m ago" : s < 129600 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago";
+}
+const short = fp => fp.length > 14 ? fp.slice(0, 14) + "…" : fp;
+const KIND = {ble: "Bluetooth", wifi: "Wi-Fi", tracker: "Tracker"};
+
+async function api(path, body) {
+  const r = await fetch(path, body ? {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-Token": TOKEN},
+    body: JSON.stringify(body)
+  } : undefined);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+  return r.json();
+}
+function say(t) { $("msg").textContent = t; }
+
+async function refresh() {
+  try {
+    state = await api("/api/state?since=" + $("range").value);
+  } catch (e) { say("Dashboard lost contact: " + e.message); return; }
+  render();
+  if (selected) loadTimeline(selected);
+}
+
+function render() {
+  const sc = state.scanners;
+  $("dot").className = "dot" + (sc.length ? " on" : "");
+  $("sstat").textContent = sc.length ? "Scanner running at “" + (sc[0].place || "?") + "”" : "Scanner stopped";
+  $("go").textContent = sc.length ? "Restart here" : "Start";
+  if (!$("place").value && sc.length && sc[0].place) $("place").value = sc[0].place;
+
+  const s = state.stats;
+  $("tiles").replaceChildren(...[["observations", "Observations"], ["devices", "Devices seen"], ["trackers", "Trackers"], ["flagged", "Flagged"], ["allowlisted", "Allowlisted"]]
+    .map(([k, l]) => el("div", {class: "panel tile"}, el("div", {class: "n"}, String(s[k])), el("div", {class: "l"}, l))));
+
+  const al = $("alerts");
+  if (!state.findings.length) {
+    al.replaceChildren(el("div", {class: "panel empty"}, "Nothing suspicious. A device is flagged when it turns up at 2+ different places (or a tracker follows you)."));
+  } else {
+    al.replaceChildren(...state.findings.map(f => el("div", {class: "panel alert " + f.level},
+      el("div", {class: "top"},
+        el("span", {class: "badge " + f.level}, f.level),
+        el("strong", {}, f.label || KIND[f.kind]),
+        el("span", {class: "badge k"}, KIND[f.kind]),
+        el("span", {class: "mono muted"}, f.fp),
+        el("span", {class: "muted"}, "score " + f.score),
+        el("span", {class: "grow"}),
+        el("button", {onclick: () => selectDev(f.fp)}, "Timeline"),
+        el("button", {onclick: () => setAllow(f.fp, true)}, "It's mine / trusted")),
+      el("div", {class: "muted"}, f.places.join(" → ") + " · " + fmt(f.first) + " – " + fmt(f.last) + " · " + f.encounters + " encounters"),
+      el("ul", {}, ...f.reasons.map(r => el("li", {}, r))))));
+  }
+
+  const q = $("filter").value.toLowerCase(), showA = $("showAllowed").checked;
+  const rows = state.devices.filter(d => (showA || !d.allowed) &&
+    (!q || (d.fp + d.label + d.places.join(" ") + KIND[d.kind]).toLowerCase().includes(q)));
+  const order = {HIGH: 0, MEDIUM: 1};
+  rows.sort((a, b) => (order[a.level] ?? 2) - (order[b.level] ?? 2) || b.last - a.last);
+  $("devs").replaceChildren(...(rows.length ? rows.map(d => {
+    const badge = d.allowed ? el("span", {class: "badge ok"}, "trusted")
+      : d.level ? el("span", {class: "badge " + d.level}, d.level) : el("span", {class: "muted"}, "—");
+    const tr = el("tr", {class: d.allowed ? "allowed" : "", tabindex: "0", onclick: () => selectDev(d.fp),
+      onkeydown: e => { if (e.key === "Enter") selectDev(d.fp); }},
+      el("td", {}, badge), el("td", {}, KIND[d.kind]), el("td", {class: "mono", title: d.fp}, short(d.fp)),
+      el("td", {}, d.label), el("td", {}, d.places.join(", ")), el("td", {}, String(d.count)),
+      el("td", {}, ago(d.last)), el("td", {}, d.rssi == null ? "" : d.rssi + " dBm"),
+      el("td", {}, el("button", {onclick: e => { e.stopPropagation(); setAllow(d.fp, !d.allowed); }}, d.allowed ? "Untrust" : "Trust")));
+    return tr;
+  }) : [el("tr", {}, el("td", {colspan: "9", class: "empty"}, "No devices yet. Start the scanner and give it a few minutes."))]));
+}
+
+async function setAllow(fp, on) {
+  try { await api(on ? "/api/allow" : "/api/unallow", {fp, note: "dashboard"}); say(on ? "Marked trusted." : "Removed from trusted."); }
+  catch (e) { say("Failed: " + e.message); }
+  refresh();
+}
+
+function selectDev(fp) { selected = fp; loadTimeline(fp); }
+
+async function loadTimeline(fp) {
+  let data;
+  try { data = await api("/api/device?fp=" + encodeURIComponent(fp) + "&since=" + $("range").value); }
+  catch (e) { return; }
+  $("tlh").hidden = $("tl").hidden = false;
+  const encs = data.encounters;
+  const box = $("tl");
+  if (!encs.length) { box.replaceChildren(el("div", {class: "empty"}, "No sightings in this range.")); return; }
+  const places = [...new Set(encs.map(e => e.place))];
+  const t0 = Math.min(...encs.map(e => e.start)), t1 = Math.max(...encs.map(e => e.end), t0 + 60);
+  const W = 1000, L = 110, lane = 34, H = places.length * lane + 30;
+  const X = t => L + (t - t0) / (t1 - t0) * (W - L - 10);
+  const NS = "http://www.w3.org/2000/svg";
+  const mk = (n, a, txt) => { const e = document.createElementNS(NS, n); for (const [k, v] of Object.entries(a)) e.setAttribute(k, v); if (txt != null) e.textContent = txt; return e; };
+  const svg = mk("svg", {viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Sighting timeline"});
+  places.forEach((p, i) => {
+    svg.append(mk("text", {x: 0, y: i * lane + 22, fill: "currentColor", "font-size": 13}, p.length > 14 ? p.slice(0, 14) + "…" : p));
+    svg.append(mk("line", {x1: L, x2: W - 10, y1: i * lane + 30, y2: i * lane + 30, stroke: "currentColor", opacity: .15}));
+  });
+  for (const e of encs) {
+    const i = places.indexOf(e.place), x = X(e.start), w = Math.max(4, X(e.end) - x);
+    const r = mk("rect", {x, y: i * lane + 8, width: w, height: 18, rx: 3, fill: "var(--bar)"});
+    r.append(mk("title", {}, `${e.place}: ${fmt(e.start)} – ${fmt(e.end)} (${e.n} sightings, best ${e.rssi ?? "?"} dBm)`));
+    svg.append(r);
+  }
+  svg.append(mk("text", {x: L, y: H - 4, fill: "currentColor", "font-size": 12, opacity: .7}, fmt(t0)));
+  svg.append(mk("text", {x: W - 10, y: H - 4, fill: "currentColor", "font-size": 12, opacity: .7, "text-anchor": "end"}, fmt(t1)));
+  box.replaceChildren(el("div", {class: "mono muted mb6"}, fp + " · " + encs.length + " encounters"), svg);
+  $("tlh").scrollIntoView({block: "nearest"});
+}
+
+$("go").addEventListener("click", async () => {
+  const place = $("place").value.trim();
+  if (!place) { say("Enter a place name first (e.g. Home, Gym, Office)."); return; }
+  say("Starting scanner…");
+  try { await api("/api/scanner", {action: "restart", place}); say("Scanner running at “" + place + "”."); }
+  catch (e) { say("Failed: " + e.message); }
+  refresh();
+});
+$("stop").addEventListener("click", async () => {
+  try { await api("/api/scanner", {action: "stop"}); say("Scanner stopped."); } catch (e) { say("Failed: " + e.message); }
+  refresh();
+});
+$("pair").addEventListener("click", async () => {
+  const box = $("pairbox");
+  if (!box.hidden) { box.hidden = true; return; }
+  try {
+    const p = await api("/api/pairing");
+    box.replaceChildren(
+      el("strong", {}, "Connect the Android app"),
+      el("div", {class: "muted"}, "Enter one of these server addresses and the key in the app. Use a VPN (e.g. Tailscale) or trusted network: traffic is plain HTTP."),
+      ...(p.urls.length ? p.urls.map(u => el("div", {class: "mono"}, u)) : [el("div", {class: "muted"}, "No network address found.")]),
+      el("div", {class: "mono"}, "Key: " + p.key),
+      p.lan ? "" : el("div", {class: "muted"}, "Dashboard is loopback-only. Restart it with: dashboard --host 0.0.0.0 (or your Tailscale IP) so the phone can reach it."));
+    box.hidden = false;
+  } catch (e) { say("Failed: " + e.message); }
+});
+$("range").addEventListener("change", refresh);
+$("filter").addEventListener("input", () => state && render());
+$("showAllowed").addEventListener("change", () => state && render());
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

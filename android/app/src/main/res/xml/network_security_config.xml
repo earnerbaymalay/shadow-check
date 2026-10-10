@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The dashboard speaks plain HTTP on a LAN/VPN address, so cleartext must be allowed.
+     Run it over Tailscale (encrypted) or a network you trust. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

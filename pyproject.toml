@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadowcheck"
+version = "0.1.0"
+description = "Passive counter-surveillance: detects unknown devices and trackers that keep appearing around you."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["bleak>=0.22"]
+
+[project.scripts]
+shadowcheck = "shadowcheck.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["shadowcheck*"]
+
+[tool.setuptools.package-data]
+shadowcheck = ["dashboard.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
