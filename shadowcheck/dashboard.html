@@ -108,7 +108,7 @@ function ago(t) {
   return s < 90 ? Math.round(s) + "s ago" : s < 5400 ? Math.round(s / 60) + "m ago" : s < 129600 ? Math.round(s / 3600) + "h ago" : Math.round(s / 86400) + "d ago";
 }
 const short = fp => fp.length > 14 ? fp.slice(0, 14) + "…" : fp;
-const KIND = {ble: "Bluetooth", wifi: "Wi-Fi", tracker: "Tracker"};
+const KIND = {ble: "Bluetooth", wifi: "Wi-Fi", ap: "Wi-Fi AP", tracker: "Tracker"};
 
 async function api(path, body) {
   const r = await fetch(path, body ? {
@@ -182,9 +182,9 @@ async function setAllow(fp, on) {
   refresh();
 }
 
-function selectDev(fp) { selected = fp; loadTimeline(fp); }
+function selectDev(fp) { selected = fp; loadTimeline(fp, true); }
 
-async function loadTimeline(fp) {
+async function loadTimeline(fp, scroll = false) {
   let data;
   try { data = await api("/api/device?fp=" + encodeURIComponent(fp) + "&since=" + $("range").value); }
   catch (e) { return; }
@@ -212,7 +212,7 @@ async function loadTimeline(fp) {
   svg.append(mk("text", {x: L, y: H - 4, fill: "currentColor", "font-size": 12, opacity: .7}, fmt(t0)));
   svg.append(mk("text", {x: W - 10, y: H - 4, fill: "currentColor", "font-size": 12, opacity: .7, "text-anchor": "end"}, fmt(t1)));
   box.replaceChildren(el("div", {class: "mono muted mb6"}, fp + " · " + encs.length + " encounters"), svg);
-  $("tlh").scrollIntoView({block: "nearest"});
+  if (scroll) $("tlh").scrollIntoView({block: "nearest"}); // only on a click, never on the 5s refresh
 }
 
 $("go").addEventListener("click", async () => {

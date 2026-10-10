@@ -31,4 +31,14 @@ class PayloadTest {
         assertEquals("http://100.64.0.1:8765", Payload.normalizeServer(" 100.64.0.1:8765/ "))
         assertEquals("https://x.example", Payload.normalizeServer("https://x.example"))
     }
+
+    @Test fun wifiAccessPointsAreIncluded() {
+        val ap = WifiObs(1.75e9, "00:13:10:85:fe:01", "AndroidWifi", -45, "Gym")
+        val j = JSONObject(Payload.build("pixel", "Gym", emptyList(), listOf(ap)))
+        val w = j.getJSONArray("wifi").getJSONObject(0)
+        assertEquals("00:13:10:85:fe:01", w.getString("bssid"))
+        assertEquals("AndroidWifi", w.getString("ssid"))
+        assertEquals(-45, w.getInt("rssi"))
+        assertEquals(0, j.getJSONArray("observations").length())
+    }
 }

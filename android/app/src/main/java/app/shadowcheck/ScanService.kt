@@ -30,6 +30,7 @@ class ScanService : Service() {
     private lateinit var prefs: Prefs
     private lateinit var uploader: Uploader
     private var scanner: BluetoothLeScanner? = null
+    private var wifi: WifiScanner? = null
     private val lastSeen = HashMap<String, Long>()
 
     private val callback = object : ScanCallback() {
@@ -89,6 +90,7 @@ class ScanService : Service() {
         }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(screenReceiver, f, Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(screenReceiver, f)
+        wifi = WifiScanner(this, prefs) { uploader.add(it) }.also { it.start() }
         ScanState.running = true
         startScan(filtered = false)
         return START_STICKY
@@ -98,6 +100,7 @@ class ScanService : Service() {
         if (ScanState.running) {
             try { unregisterReceiver(screenReceiver) } catch (_: IllegalArgumentException) {}
             try { scanner?.stopScan(callback) } catch (_: SecurityException) {} catch (_: IllegalStateException) {}
+            wifi?.stop()
             uploader.stop()
         }
         ScanState.running = false

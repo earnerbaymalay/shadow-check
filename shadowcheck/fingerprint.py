@@ -104,3 +104,13 @@ def wifi_fingerprint(mac, ie_hash, ssid):
         # Directed probe for a specific network + exact capability layout.
         return Fingerprint("wifi~" + h(ie_hash, ssid), 0.6, "wifi", "probes:" + ssid[:24])
     return Fingerprint("wifi~" + h(ie_hash), 0.25, "wifi", "")
+
+
+# ---- Wi-Fi access points (seen by phones, which cannot capture probe requests) ----
+
+def ap_fingerprint(bssid, ssid):
+    """An AP's BSSID is stable while it is up. Seen at several places it is a
+    mobile hotspot / travel router moving with someone."""
+    strength = 0.8 if mac_is_random(bssid) else 1.0
+    return Fingerprint("ap:" + h(bssid.lower()), strength, "ap",
+                       ("AP: " + ssid[:24]) if ssid else "AP: hidden network")

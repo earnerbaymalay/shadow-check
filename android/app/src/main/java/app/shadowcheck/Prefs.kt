@@ -34,4 +34,6 @@ object ScanState {
     @Volatile var filtered = false      // true while the screen is off (tracker-only scan)
     @Volatile var lastError = ""
     @Volatile var alerts = 0
+    @Volatile var apSeen = 0L
+    @Volatile var wifiNote = ""
 }

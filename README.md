@@ -86,8 +86,10 @@ Only 802.11 probe requests are read (transmitter address, signal, SSID, capabili
 
 ## Android app
 A native Kotlin app in [`android/`](android) (no third-party dependencies, min Android 8.0).
-It scans BLE on the phone and uploads raw advertisements to the dashboard, which computes
+It scans BLE **and Wi-Fi access points** on the phone and uploads them to the dashboard, which computes
 fingerprints with the same code as the laptop so one device gets one identity everywhere.
+A phone cannot capture other phones' Wi-Fi probe requests, but it can see access points, so a
+mobile hotspot or travel router that keeps appearing at your different places is flagged too.
 It also polls the dashboard and raises a notification when something is flagged.
 
 **Setup**
@@ -101,9 +103,9 @@ It also polls the dashboard and raises a notification when something is flagged.
 
 Full details, permissions and limitations: [`docs/ANDROID.md`](docs/ANDROID.md).
 
-> Status: the app **builds** (Gradle 8.11.1, AGP 8.9.1, Kotlin 2.1.20, JDK 21) and its JVM
-> unit tests pass, but it has **not yet been run on a physical phone**. Please open an issue
-> if you hit problems.
+> Status: verified on an Android 17 emulator (Wi-Fi AP scanning, BLE tracker scanning, place
+> switching, alerts, screen-off tracker filters, service restart): see
+> [`docs/EMULATOR_TEST.md`](docs/EMULATOR_TEST.md). **Not yet tested on a physical phone.**
 
 ## Security model
 - Dashboard binds to `127.0.0.1` unless you pass `--host`. Non-loopback mode requires a
@@ -139,10 +141,10 @@ but not all; know your local law. Keep retention short and never share raw data.
 
 ## Development
 ```bash
-.venv/bin/pip install pytest && .venv/bin/python -m pytest      # 22 tests
+.venv/bin/pip install pytest && .venv/bin/python -m pytest      # 30 tests
 ```
 Layout: `shadowcheck/` (engine, fingerprinting, collectors, dashboard, ingest, report),
-`tests/`, `android/` (Kotlin app), `docs/`.
+`tests/`, `android/` (Kotlin app), `tools/` (emulator beacon), `docs/`.
 
 ## License
 MIT. See [LICENSE](LICENSE).

@@ -94,3 +94,40 @@ def test_lan_mode_requires_login_for_pages(store, tmp_path, monkeypatch):
     req = urllib.request.Request(url, headers={"Authorization": "Basic " + base64.b64encode(f"u:{key}".encode()).decode()})
     assert urllib.request.urlopen(req).status == 200
     srv.shutdown()
+
+
+def test_wifi_aps_ingested_with_validation(store):
+    r = ingest(store, {"device": "pixel", "place": "Cafe", "wifi": [
+        {"bssid": "00:13:10:85:fe:01", "ssid": "AndroidWifi", "rssi": -45, "ts": NOW},
+        {"bssid": "da:a1:19:00:00:01", "ssid": "", "rssi": -70, "ts": NOW},
+        {"bssid": "00:00:00:00:00:00", "ssid": "x", "rssi": -50},
+        {"bssid": "nope", "rssi": -50}, {"bssid": "00:13:10:85:fe:02", "rssi": 5}]}, now=NOW)
+    assert r == {"accepted": 2, "rejected": 3}
+    rows = store.since(0)
+    assert {x[2] for x in rows} == {"ap"}
+    assert {x[8] for x in rows} == {"AP: AndroidWifi", "AP: hidden network"}
+
+
+def test_ble_and_wifi_in_one_batch(store):
+    r = ingest(store, {"place": "A", "observations": [ok_obs()],
+                       "wifi": [{"bssid": "00:13:10:85:fe:01", "rssi": -45}]}, now=NOW)
+    assert r["accepted"] == 2
+
+
+def test_moving_access_point_is_flagged(store):
+    from shadowcheck.engine import analyze
+    for place, off in (("Home", 0), ("Gym", 7200)):
+        ingest(store, {"place": place, "wifi": [
+            {"bssid": "da:a1:19:00:00:09", "ssid": "Hotspot", "rssi": -50, "ts": NOW + off + i * 20}
+            for i in range(6)]}, now=NOW + off + 200)
+    f = analyze(store.since(0))
+    assert f and f[0].kind == "ap" and set(f[0].places) == {"Home", "Gym"}
+    assert any("moves with you" in r for r in f[0].reasons)
+
+
+def test_home_router_single_place_not_flagged(store):
+    from shadowcheck.engine import analyze
+    ingest(store, {"place": "Home", "wifi": [
+        {"bssid": "a0:51:0b:af:b8:ec", "ssid": "HomeNet", "rssi": -40, "ts": NOW + i * 20}
+        for i in range(10)]}, now=NOW + 300)
+    assert analyze(store.since(0)) == []

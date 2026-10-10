@@ -6,7 +6,7 @@ the same code the laptop scanner uses, so one device gets one identity everywher
 import re
 import time
 
-from .fingerprint import ble_fingerprint
+from .fingerprint import ap_fingerprint, ble_fingerprint
 
 MAX_BATCH = 500
 MAX_AGE_S = 86400  # a phone that was offline may flush old sightings
@@ -50,21 +50,39 @@ def _one(o, now):
     return ts, fp, rssi
 
 
+def _ap(o, now):
+    bssid = o.get("bssid", "")
+    if not ADDR.match(bssid):
+        raise ValueError("bad bssid")
+    rssi = o.get("rssi")
+    if not isinstance(rssi, int) or not -127 <= rssi <= 0:
+        raise ValueError("bad rssi")
+    ts = o.get("ts")
+    if not isinstance(ts, (int, float)) or not now - MAX_AGE_S <= ts <= now + 60:
+        ts = now
+    if bssid.lower() in ("00:00:00:00:00:00", "ff:ff:ff:ff:ff:ff"):
+        raise ValueError("bad bssid")
+    return ts, ap_fingerprint(bssid, clean(o.get("ssid"), 32)), rssi
+
+
 def ingest(store, payload, now=None):
     """Returns {"accepted": n, "rejected": n}. Never raises on bad observations."""
     now = now or time.time()
     device = clean(payload.get("device"), 24) or "remote"
     place = clean(payload.get("place"), 40)
-    obs = payload.get("observations")
-    if not place or not isinstance(obs, list) or len(obs) > MAX_BATCH:
-        raise ValueError("place and observations[<=%d] required" % MAX_BATCH)
+    obs = payload.get("observations", [])
+    wifi = payload.get("wifi", [])
+    if (not place or not isinstance(obs, list) or not isinstance(wifi, list)
+            or len(obs) + len(wifi) > MAX_BATCH):
+        raise ValueError("place and observations/wifi lists (<=%d total) required" % MAX_BATCH)
     ok = bad = 0
-    for o in obs:
-        try:
-            ts, fp, rssi = _one(o, now)
-        except (ValueError, AttributeError, TypeError):
-            bad += 1
-            continue
-        store.add(ts, fp.fp, fp.kind, fp.strength, rssi, place, None, None, fp.label, src=device)
-        ok += 1
+    for items, parse in ((obs, _one), (wifi, _ap)):
+        for o in items:
+            try:
+                ts, fp, rssi = parse(o, now)
+            except (ValueError, AttributeError, TypeError):
+                bad += 1
+                continue
+            store.add(ts, fp.fp, fp.kind, fp.strength, rssi, place, None, None, fp.label, src=device)
+            ok += 1
     return {"accepted": ok, "rejected": bad}

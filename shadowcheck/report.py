@@ -7,7 +7,7 @@ from datetime import datetime
 
 from .engine import analyze
 
-KIND = {"ble": "Bluetooth", "wifi": "Wi-Fi", "tracker": "Tracker"}
+KIND = {"ble": "Bluetooth", "wifi": "Wi-Fi", "ap": "Wi-Fi AP", "tracker": "Tracker"}
 DEFAULT_REPORT = os.path.expanduser("~/Desktop/Shadow Check Report.html")
 
 CSS = """

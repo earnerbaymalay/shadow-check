@@ -8,7 +8,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -43,7 +45,8 @@ class MainActivity : Activity() {
         }
         fun label(t: String) = TextView(this).apply { text = t; setPadding(0, pad / 2, 0, 0) }
         fun field(hint: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT) =
-            EditText(this).apply { this.hint = hint; setText(value); inputType = type; setSingleLine() }
+            // Do not call setSingleLine() here: it replaces the password masking set by inputType.
+            EditText(this).apply { this.hint = hint; setText(value); inputType = type }
 
         col.addView(TextView(this).apply { text = "Shadow Check"; textSize = 24f })
         col.addView(TextView(this).apply {
@@ -58,6 +61,12 @@ class MainActivity : Activity() {
         col.addView(key)
         col.addView(label("Where are you? (change when you move)"))
         place = field("Home, Gym, Office…", prefs.place)
+        // Save as you type so a running scan switches place immediately, without leaving the screen.
+        place.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) { prefs.place = s.toString().trim() }
+        })
         col.addView(place)
         col.addView(label("This phone's name"))
         device = field("Pixel", prefs.device)
@@ -89,12 +98,15 @@ class MainActivity : Activity() {
         val p = ArrayList<String>()
         if (Build.VERSION.SDK_INT >= 31) p += Manifest.permission.BLUETOOTH_SCAN
         p += Manifest.permission.ACCESS_FINE_LOCATION
-        if (Build.VERSION.SDK_INT >= 33) p += Manifest.permission.POST_NOTIFICATIONS
+        if (Build.VERSION.SDK_INT >= 33) {
+            p += Manifest.permission.POST_NOTIFICATIONS
+            p += Manifest.permission.NEARBY_WIFI_DEVICES
+        }
         return p
     }
 
     private fun missingRequired() = needed().filter {
-        it != Manifest.permission.POST_NOTIFICATIONS &&
+        it != Manifest.permission.POST_NOTIFICATIONS && it != Manifest.permission.NEARBY_WIFI_DEVICES &&
             checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
     }
 
@@ -131,7 +143,8 @@ class MainActivity : Activity() {
                 if (ScanState.filtered) "Scanning (screen off: trackers only)" else "Scanning all devices"
             } else "Stopped")
             append("\nSeen: ${ScanState.seen}   Sent: ${ScanState.sent}   Queued: ${ScanState.queued}")
-            append("\nAlerts raised: ${ScanState.alerts}")
+            append("\nWi-Fi APs seen: ${ScanState.apSeen}   Alerts raised: ${ScanState.alerts}")
+            if (ScanState.wifiNote.isNotEmpty() && ScanState.running) append("\nWi-Fi: ${ScanState.wifiNote}")
             if (ScanState.lastError.isNotEmpty()) append("\n⚠ ${ScanState.lastError}")
             if (note.isNotEmpty() && !ScanState.running) append("\n$note")
         }

@@ -9,7 +9,7 @@ import java.net.URL
 
 /** Queues observations, uploads them in batches, and polls the server for alerts. */
 class Uploader(private val prefs: Prefs, private val onAlert: (String, String, String) -> Unit) {
-    private val queue = ArrayDeque<Obs>()
+    private val queue = ArrayDeque<Sighting>()
     private val thread = HandlerThread("shadowcheck-upload").apply { start() }
     private val handler = Handler(thread.looper)
     private val alerted = HashSet<String>()
@@ -37,20 +37,20 @@ class Uploader(private val prefs: Prefs, private val onAlert: (String, String, S
         thread.quitSafely()
     }
 
-    @Synchronized fun add(o: Obs) {
+    @Synchronized fun add(o: Sighting) {
         if (queue.size >= MAX_QUEUE) queue.removeFirst()   // drop oldest if offline for long
         queue.addLast(o)
         ScanState.queued = queue.size
     }
 
-    @Synchronized private fun take(n: Int): List<Obs> {
-        val out = ArrayList<Obs>(n)
+    @Synchronized private fun take(n: Int): List<Sighting> {
+        val out = ArrayList<Sighting>(n)
         while (out.size < n && queue.isNotEmpty()) out.add(queue.removeFirst())
         ScanState.queued = queue.size
         return out
     }
 
-    @Synchronized private fun requeue(batch: List<Obs>) {
+    @Synchronized private fun requeue(batch: List<Sighting>) {
         for (o in batch.asReversed()) queue.addFirst(o)
         while (queue.size > MAX_QUEUE) queue.removeFirst()
         ScanState.queued = queue.size
@@ -67,7 +67,13 @@ class Uploader(private val prefs: Prefs, private val onAlert: (String, String, S
             if (batch.isEmpty()) return
             try {
                 for ((place, group) in batch.groupBy { it.place }) {
-                    post("$base/api/ingest", Payload.build(prefs.device, place, group))
+                    post(
+                        "$base/api/ingest",
+                        Payload.build(
+                            prefs.device, place,
+                            group.filterIsInstance<Obs>(), group.filterIsInstance<WifiObs>(),
+                        ),
+                    )
                 }
                 ScanState.sent += batch.size
                 ScanState.lastError = ""

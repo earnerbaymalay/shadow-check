@@ -14,7 +14,7 @@ class Config:
     gap_s: int = 300            # silence longer than this ends an encounter
     min_encounter_s: int = 60   # shorter encounters are passers-by
     min_obs: int = 3
-    close_rssi: dict = field(default_factory=lambda: {"ble": -65, "wifi": -60, "tracker": -70})
+    close_rssi: dict = field(default_factory=lambda: {"ble": -65, "wifi": -60, "ap": -60, "tracker": -70})
     high: float = 6.0
     medium: float = 3.0
     tracker_dwell_s: int = 20 * 60
@@ -107,6 +107,8 @@ def analyze(rows, allowed=frozenset(), cfg=None):
                 reasons.append(f"mostly within close range ({close_frac:.0%} of sightings)")
             if same_day_multi:
                 reasons.append("appeared at multiple places on the same day")
+            if kind == "ap":
+                reasons.append("a Wi-Fi network that moves with you: mobile hotspot or travel router")
             if strength < 0.5:
                 reasons.append("weak fingerprint: may be several identical phones")
 

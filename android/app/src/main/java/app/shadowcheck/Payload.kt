@@ -3,6 +3,20 @@ package app.shadowcheck
 import org.json.JSONArray
 import org.json.JSONObject
 
+/** Anything the phone sensed; carries the place label it was sensed at. */
+sealed interface Sighting {
+    val place: String
+}
+
+/** One Wi-Fi access point from a scan (phones see APs, not other phones). */
+data class WifiObs(
+    val ts: Double,
+    val bssid: String,
+    val ssid: String,
+    val rssi: Int,
+    override val place: String,
+) : Sighting
+
 /** One BLE advertisement, kept raw: the server computes the fingerprint. */
 data class Obs(
     val ts: Double,
@@ -13,15 +27,15 @@ data class Obs(
     val uuids: List<String>,
     val svc: Map<String, ByteArray>,
     val tx: Int?,
-    val place: String,
-)
+    override val place: String,
+) : Sighting
 
 /** Server accepts at most 62 bytes per payload. */
 fun ByteArray.toHex(): String =
     take(62).joinToString("") { "%02x".format(it.toInt() and 0xFF) }
 
 object Payload {
-    fun build(device: String, place: String, obs: List<Obs>): String {
+    fun build(device: String, place: String, obs: List<Obs>, wifi: List<WifiObs> = emptyList()): String {
         val arr = JSONArray()
         for (x in obs) {
             val j = JSONObject()
@@ -43,7 +57,12 @@ object Payload {
             x.tx?.let { j.put("tx", it) }
             arr.put(j)
         }
-        return JSONObject().put("device", device).put("place", place).put("observations", arr).toString()
+        val aps = JSONArray()
+        for (w in wifi) {
+            aps.put(JSONObject().put("ts", w.ts).put("bssid", w.bssid).put("ssid", w.ssid).put("rssi", w.rssi))
+        }
+        return JSONObject().put("device", device).put("place", place)
+            .put("observations", arr).put("wifi", aps).toString()
     }
 
     fun normalizeServer(raw: String): String {
